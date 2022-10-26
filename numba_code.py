@@ -80,7 +80,7 @@ def growth_event(in_numbers,fitnesses,t):
 #Nmin = bottleneck number
 
 @njit
-def dilution_migration_event(in_numbers,migration_matrix,Nmin):
+def dilution_migration_event(in_numbers,migration_matrix,Nmin_table):
     N_demes, N_types= np.shape(in_numbers)
 
     #Numbers that will be kept at the end of the migration/dilution phase
@@ -105,8 +105,8 @@ def dilution_migration_event(in_numbers,migration_matrix,Nmin):
             mij=migration_matrix[i,j]
 
             #migrants from i to j, mutants and wild-types
-            p0=max(min(Nmin*p*mij/Ni,1),0)
-            p1=max(min(Nmin*(1-p)*mij/Ni,1),0)
+            p0=max(min(Nmin_table[i]*p*mij/Ni,1),0)
+            p1=max(min(Nmin_table[i]*(1-p)*mij/Ni,1),0)
             migrants_ij[0]=np.random.binomial(Ni, p0,1)[0]
             migrants_ij[1]=np.random.binomial(Ni, p1, 1)[0]
 
@@ -145,9 +145,9 @@ def extinct_wild(numbers):
 #growth_factor = t the growth parameter
 
 @njit
-def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics=False):
+def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics=False, dilution_std=None, fitness_range=None):
     N_demes, N_types= np.shape(in_numbers)
-
+    s = fitnesses[0] - 1
     #Setting up array to track numbers, can be saved
     #Its size = size_follow_parameters
     if start_follow_numbers is None:
@@ -165,8 +165,21 @@ def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmi
     for i in range(nb_cycles):
         end_cycle = nb_cycles
         #One cycle: growth then dilution/migration
-        numbers1=growth_event(numbers,fitnesses,growth_factor)
-        numbers=dilution_migration_event(numbers1,migration_matrix,Nmin)
+        if fitness_range is None:  
+            numbers1=growth_event(numbers,fitnesses,growth_factor)
+            
+        else:
+            fit = np.array([np.random.uniform(1+s-fitness_range,1+s+fitness_range,1)[0],1.])
+            numbers1=growth_event(numbers,fit,growth_factor)
+
+            
+        if dilution_std is None:
+            Nmin_table = np.array([Nmin]*N_demes)
+        else:
+            Nmin_table = np.random.normal(loc=Nmin, scale=dilution_std, size=N_demes).astype(np.int64)
+            Nmin_table[np.where(Nmin_table<0)] = 0
+        
+        numbers=dilution_migration_event(numbers1,migration_matrix,Nmin_table)
 
         #Saving new numbers in the tracking array
         if (start_cycle+i)%print_frequency==0 and ((i+start_cycle)/print_frequency)<size_follow_numbers:
@@ -190,7 +203,7 @@ def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmi
     
     #If mutants are not extinct or fixed at the end of nb_cycles cycles, we keep going
     if keep_going:
-        follow_numbers, end_cycle, fixation= cycle(numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, follow_numbers, size_follow_numbers, start_cycle+end_cycle, print_frequency, save_dynamics)
+        follow_numbers, end_cycle, fixation= cycle(numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, follow_numbers, size_follow_numbers, start_cycle+end_cycle, print_frequency, save_dynamics, dilution_std, fitness_range)
     return follow_numbers, end_cycle, fixation
 
 #________________________________________Fixation probability computed on several simulations_______________________________________________
@@ -199,7 +212,7 @@ def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmi
 #We compute the fixation probability starting from in_numbers, on nb_sim simulations.
 #For each simulation we use the function above, and see if the mutant is fixed or not
 
-def fixation_probability(in_numbers, folder, migration_matrix, fitnesses, nb_sim, nb_cycles, growth_factor, Nmin, size_follow_numbers=10000, print_frequency=1, save_dynamics=False):
+def fixation_probability(in_numbers, folder, migration_matrix, fitnesses, nb_sim, nb_cycles, growth_factor, Nmin, size_follow_numbers=10000, print_frequency=1, save_dynamics=False, dilution_std=None, fitness_range=None):
     #Counter for fixation trajectories
     fix_count=0
 
@@ -210,7 +223,7 @@ def fixation_probability(in_numbers, folder, migration_matrix, fitnesses, nb_sim
     for i in range(nb_sim):
         start_cycle=0
         start_follow_numbers=None
-        follow_numbers, end_cycle, fixation = cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics)
+        follow_numbers, end_cycle, fixation = cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics, dilution_std, fitness_range)
         
         if fixation :
             fix_count+=1
