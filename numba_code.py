@@ -177,7 +177,7 @@ def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmi
             Nmin_table = np.array([Nmin]*N_demes)
         else:
             Nmin_table = np.random.normal(loc=Nmin, scale=dilution_std, size=N_demes).astype(np.int64)
-            Nmin_table[np.where(Nmin_table<0)] = 0
+            Nmin_table[np.where(Nmin_table<=0)] = 1
         
         numbers=dilution_migration_event(numbers1,migration_matrix,Nmin_table)
 
