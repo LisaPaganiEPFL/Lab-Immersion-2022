@@ -145,7 +145,7 @@ def extinct_wild(numbers):
 #growth_factor = t the growth parameter
 
 @njit
-def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics=False, dilution_std=None, fitness_range=None):
+def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics=False, dilution_std=None, fitness_range=None, structure = None):
     N_demes, N_types= np.shape(in_numbers)
     s = fitnesses[0] - 1
     #Setting up array to track numbers, can be saved
@@ -169,15 +169,31 @@ def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmi
             numbers1=growth_event(numbers,fitnesses,growth_factor)
             
         else:
-            fit = np.array([np.random.uniform(1+s-fitness_range,1+s+fitness_range,1)[0],1.])
-            numbers1=growth_event(numbers,fit,growth_factor)
+            if structure == "star":
+                fit = np.zeros((N_demes,2))
+                
+                fit_hub = np.random.uniform(1+s-fitness_range,1+s+fitness_range,1)[0]
+                fit_leaf = np.random.uniform(1+s-fitness_range,1+s+fitness_range,1)[0]
+                
+                fit[0] = np.array([fit_hub,1.])
+                fit[1:] = np.array([fit_leaf,1.])
+                
+                
+                numbers1=growth_event(numbers,fit,growth_factor)
+                
+            else:
+              
+                fit = np.array(np.random.uniform(1+s-fitness_range,1+s+fitness_range,1)[0])
+                numbers1=growth_event(numbers,fit,growth_factor)
 
             
         if dilution_std is None:
             Nmin_table = np.array([Nmin]*N_demes)
         else:
             Nmin_table = np.random.normal(loc=Nmin, scale=dilution_std, size=N_demes).astype(np.int64)
-            Nmin_table[np.where(Nmin_table<=0)] = 1
+            Nmin_table[np.where(Nmin_table<(Nmin/10))] = int(Nmin/10)
+            #Nmin_table = np.random.uniform(Nmin/10,5*Nmin,N_demes).astype(np.int64)
+ 
         
         numbers=dilution_migration_event(numbers1,migration_matrix,Nmin_table)
 
@@ -203,7 +219,7 @@ def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmi
     
     #If mutants are not extinct or fixed at the end of nb_cycles cycles, we keep going
     if keep_going:
-        follow_numbers, end_cycle, fixation= cycle(numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, follow_numbers, size_follow_numbers, start_cycle+end_cycle, print_frequency, save_dynamics, dilution_std, fitness_range)
+        follow_numbers, end_cycle, fixation= cycle(numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, follow_numbers, size_follow_numbers, start_cycle+end_cycle, print_frequency, save_dynamics, dilution_std, fitness_range, structure)
     return follow_numbers, end_cycle, fixation
 
 #________________________________________Fixation probability computed on several simulations_______________________________________________
@@ -212,7 +228,7 @@ def cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmi
 #We compute the fixation probability starting from in_numbers, on nb_sim simulations.
 #For each simulation we use the function above, and see if the mutant is fixed or not
 
-def fixation_probability(in_numbers, folder, migration_matrix, fitnesses, nb_sim, nb_cycles, growth_factor, Nmin, size_follow_numbers=10000, print_frequency=1, save_dynamics=False, dilution_std=None, fitness_range=None):
+def fixation_probability(in_numbers, folder, migration_matrix, fitnesses, nb_sim, nb_cycles, growth_factor, Nmin, size_follow_numbers=10000, print_frequency=1, save_dynamics=False, dilution_std=None, fitness_range=None, structure = None):
     #Counter for fixation trajectories
     fix_count=0
 
@@ -223,7 +239,7 @@ def fixation_probability(in_numbers, folder, migration_matrix, fitnesses, nb_sim
     for i in range(nb_sim):
         start_cycle=0
         start_follow_numbers=None
-        follow_numbers, end_cycle, fixation = cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics, dilution_std, fitness_range)
+        follow_numbers, end_cycle, fixation = cycle(in_numbers, migration_matrix, fitnesses, nb_cycles, growth_factor, Nmin, start_follow_numbers, size_follow_numbers, start_cycle, print_frequency, save_dynamics, dilution_std, fitness_range, structure)
         
         if fixation :
             fix_count+=1
